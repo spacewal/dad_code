@@ -239,13 +239,10 @@ for ticker in sp500_df['Symbol']:  # Make sure to access the 'Symbol' column
 df_stocks = pd.DataFrame(data)
 
 # Merge your existing stock DataFrame with the sector data
-df_stocks = df_stocks.merge(sp500_df, left_on='Ticker', right_on='Symbol', how='left')
+df_stocks = df_stocks.merge(sp500_df, on='Symbol', how='left')
 
 # Filter stocks with volume greater than 1 million
 df_filtered = df_stocks[df_stocks['Volume'] > 1000000]
-
-# Display the filtered DataFrame
-print(df_filtered.head())
 
 # Creating the Streamlit application
 st.title('S&P 500 Stock Data Viewer')
