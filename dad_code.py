@@ -13,7 +13,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-"""# Data"""
+# Streamlit page configuration
+st.set_page_config(page_title="S&P 500 Stock Analysis", layout="wide")
 
 # Fetch the S&P 500 tickers and sectors
 url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
@@ -24,273 +25,95 @@ sp500_df['Symbol'] = sp500_df['Symbol'].str.replace('.', '-')
 # Select only the necessary columns
 sp500_df = sp500_df[['Symbol', 'GICS Sector']]
 
-# Read the list of ticker symbols from the provided URL into a pandas DataFrame
-tickers_df = pd.read_csv("https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/all/all_tickers.txt", header=None, names=['Symbol'])
+# Define functions for financial indicators here
 
-# Convert the 'Symbol' column of the DataFrame to a list of strings
-all_tickers = tickers_df['Symbol'].astype(str).tolist()
-
-# Replace any '.' with '-' in the ticker symbols
-all_tickers = [ticker.replace('.', '-') for ticker in all_tickers]
-
-
-# Now you can use 'all_tickers' in your script instead of 'sp500_tickers'
-
-"""# Functions"""
-
-# Define the Ichimoku Cloud calculation function
 def calculate_ichimoku_cloud(df):
     tenkan_period = 9
     kijun_period = 26
     senkou_span_b_period = 52
-
     df['conversion_line'] = (df['High'].rolling(window=tenkan_period).max() + df['Low'].rolling(window=tenkan_period).min()) / 2
     df['base_line'] = (df['High'].rolling(window=kijun_period).max() + df['Low'].rolling(window=kijun_period).min()) / 2
     df['senkou_span_a'] = ((df['conversion_line'] + df['base_line']) / 2).shift(kijun_period)
     df['senkou_span_b'] = ((df['High'].rolling(window=senkou_span_b_period).max() + df['Low'].rolling(window=senkou_span_b_period).min()) / 2).shift(kijun_period)
-
-    # Assuming 'last_price' is the last 'Close' price from the historical data
     last_price = df['Close'].iloc[-1]
     span_a = df['senkou_span_a'].iloc[-1]
     span_b = df['senkou_span_b'].iloc[-1]
-
-    # Check if the last price is above the Ichimoku Cloud
     cloud_status = "ABOVE CLOUD" if last_price >= span_a and last_price >= span_b else "NOT ABOVE CLOUD"
     return cloud_status
 
-def calculate_awesome_oscillator(df, short_period=5, long_period=34):
-    # Calculate the midpoint ((High + Low) / 2) of each bar
+def calculate_awesome_oscillator(df):
     df['Midpoint'] = (df['High'] + df['Low']) / 2
-
-    # Calculate the short and long period simple moving averages (SMAs) of the midpoints
-    df['SMA_Short'] = df['Midpoint'].rolling(window=short_period).mean()
-    df['SMA_Long'] = df['Midpoint'].rolling(window=long_period).mean()
-
-    # Calculate the Awesome Oscillator as the difference between the short and long period SMAs
+    df['SMA_Short'] = df['Midpoint'].rolling(window=5).mean()
+    df['SMA_Long'] = df['Midpoint'].rolling(window=34).mean()
     df['AO'] = df['SMA_Short'] - df['SMA_Long']
-
-    # Return the last value of the Awesome Oscillator series
     return df['AO'].iloc[-1]
 
-# Define the interpretation functions
-def interpret_ao(ao_value):
-    return "BULLISH" if ao_value >= 0 else "BEARISH"
-
-def interpret_ao_movement(current_ao, previous_ao):
-    if current_ao >= 0 and previous_ao < current_ao:
-        return "BULLISH_INCREASING"
-    elif current_ao >= 0 and previous_ao > current_ao:
-        return "BULLISH_DECREASING"
-    elif current_ao < 0 and previous_ao < current_ao:
-        return "BEARISH_INCREASING"
-    elif current_ao < 0 and previous_ao > current_ao:
-        return "BEARISH_DECREASING"
-    return "STABLE"  # If current and previous AO values are the same
-
-# Define the VWAP calculation function
 def calculate_vwap(df):
     vwap = (df['Close'] * df['Volume']).cumsum() / df['Volume'].cumsum()
-    return vwap.iloc[-1]  # Return only the last value
+    return vwap.iloc[-1]
 
-# Define the function to calculate EMA using pandas 'ewm' method
 def calculate_ema(series, span):
     return series.ewm(span=span, adjust=False).mean()
 
-# Define a function to evaluate conditions for each EMA and assign labels
-def evaluate_ema_conditions(row):
-    labels = {}
-    # Check conditions for each EMA
-    for ema in ['EMA_21', 'EMA_36', 'EMA_50', 'EMA_95', 'EMA_200']:
-        if row[ema] >= max([row[e] for e in ['EMA_50', 'EMA_95', 'EMA_200'] if e != ema]):
-            labels[ema] = "BULL"
-        elif row[ema] < row['EMA_36'] and row[ema] > max([row[e] for e in ['EMA_50', 'EMA_200'] if e != ema]):
-            labels[ema] = "BULL"
-        elif row[ema] < row['EMA_36'] and row[ema] < row['EMA_21'] and row[ema] > max([row[e] for e in ['EMA_95', 'EMA_200'] if e != ema]):
-            labels[ema] = "BULL"
-        elif row[ema] < row['EMA_21'] and row[ema] < row['EMA_36'] and row[ema] < row['EMA_50'] and row[ema] > row['EMA_200']:
-            labels[ema] = "BULL"
-        elif row[ema] < row['EMA_21'] and row[ema] < row['EMA_36'] and row[ema] < row['EMA_50'] and row[ema] < row['EMA_95']:
-            labels[ema] = "BULL"
-        else:
-            labels[ema] = "BEAR"
-    return labels
-
-# Define the function to calculate smoothed RSI
 def calculate_rsi(data, periods=14):
     delta = data.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=periods).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=periods).mean()
-
     RS = gain / loss
     RSI = 100 - (100 / (1 + RS))
-
     return RSI
 
-# Define the function to calculate traditional RSI
-def calculate_rsi_trad(data, period=14):
-    delta = data.diff(1)
-    gain = (delta.where(delta > 0, 0)).fillna(0)
-    loss = (-delta.where(delta < 0, 0)).fillna(0)
-
-    average_gain = gain.rolling(window=period).mean()
-    average_loss = loss.rolling(window=period).mean()
-
-    rs = average_gain / average_loss
-    rsi = 100 - (100 / (1 + rs))
-
-    return rsi
-
-# Define the cahold function
-def cahold(previous_close, latest_price):
-    return "BULLISH" if latest_price >= previous_close else "BEARISH"
-
-# Define the function to calculate MACD
-def calculate_macd(df, slow_period=26, fast_period=12, signal_period=9):
-    # Calculate the short-term EMA (fast period)
-    ema_fast = df['Close'].ewm(span=fast_period, adjust=False).mean()
-
-    # Calculate the long-term EMA (slow period)
-    ema_slow = df['Close'].ewm(span=slow_period, adjust=False).mean()
-
-    # Calculate the MACD line
+def calculate_macd(df):
+    ema_fast = df['Close'].ewm(span=12, adjust=False).mean()
+    ema_slow = df['Close'].ewm(span=26, adjust=False).mean()
     macd_line = ema_fast - ema_slow
-
-    # Calculate the Signal line
-    signal_line = macd_line.ewm(span=signal_period, adjust=False).mean()
-
+    signal_line = macd_line.ewm(span=9, adjust=False).mean()
     return macd_line, signal_line
 
-# Define the function to calculate returns
-def calculate_returns(df):
-    return df['Close'].pct_change().dropna()
+# Function to load and process data
+@st.cache
+def load_data(tickers):
+    data = []
+    for ticker in tickers:
+        stock = yf.Ticker(ticker)
+        hist_data = stock.history(period="1y")
+        if not hist_data.empty:
+            stock_dict = {
+                'Date': hist_data.index[-1],
+                'Ticker': ticker,
+                'Previous_Close': hist_data['Close'].iloc[-1],
+                'Volume': hist_data['Volume'].iloc[-1],
+                'Cloud_Status': calculate_ichimoku_cloud(hist_data),
+                'AO': calculate_awesome_oscillator(hist_data),
+                'VWAP': calculate_vwap(hist_data)
+            }
+            data.append(stock_dict)
+    return pd.DataFrame(data)
 
-"""# Create dataframe"""
+# Load data
+df_stocks = load_data(sp500_df['Symbol'])
+df_stocks = df_stocks.merge(sp500_df, on='Symbol', how='left')
 
-# Initialize an empty list to store the data
-data = []
+# Streamlit UI
+st.title('S&P 500 Stock Analysis')
+st.sidebar.header('Filter Options')
 
-# Loop through each ticker symbol
-for ticker in sp500_df:
-    # Fetch the ticker data
-    stock = yf.Ticker(ticker)
+# Filters for sector and volume
+sector_filter = st.sidebar.multiselect('Select Sector', options=sp500_df['GICS Sector'].unique())
+if sector_filter:
+    df_stocks = df_stocks[df_stocks['GICS Sector'].isin(sector_filter)]
 
-    # Get the historical data for the ticker
-    hist_data = stock.history(period="1y")
-
-    # Make sure to check if you've got enough data
-    if not hist_data.empty and len(hist_data) > 1:
-        # Calculate returns
-        hist_data['Returns'] = calculate_returns(hist_data)
-
-    if not hist_data.empty:
-        # Calculate Ichimoku Cloud status
-        cloud_status = calculate_ichimoku_cloud(hist_data)
-
-        # Calculate Awesome Oscillator value
-        ao_value = calculate_awesome_oscillator(hist_data)
-
-        # Get the last two Awesome Oscillator values for movement interpretation
-        if len(hist_data['AO']) >= 2:
-            current_ao = hist_data['AO'].iloc[-1]
-            previous_ao = hist_data['AO'].iloc[-2]
-            ao_movement = interpret_ao_movement(current_ao, previous_ao)
-        else:
-            ao_movement = None
-
-        # Calculate VWAP value
-        vwap_value = calculate_vwap(hist_data)
-
-        # Calculate each EMA
-        for window in [21, 36, 50, 95, 200]:
-            ema_column_name = f'EMA_{window}'
-            hist_data[ema_column_name] = calculate_ema(hist_data['Close'], span=window)
-
-        # Calculate MACD and Signal line
-        hist_data['MACD'], hist_data['Signal_Line'] = calculate_macd(hist_data)
-
-        # Calculate RSIs
-        rsi_smoothed = calculate_rsi(hist_data['Close'])
-        rsi_trad = calculate_rsi_trad(hist_data['Close'])
-
-        # Calculate the cahold value
-        if len(hist_data) >= 2:
-          cahold_value = cahold(hist_data['Close'].iloc[-2], hist_data['Close'].iloc[-1])
-        else:
-          cahold_value = None
-
-        # Append a dictionary to the data list
-        stock_dict ={
-            'Date': hist_data.index[-1],
-            'Returns': hist_data['Returns'].iloc[-1],  # Add returns here
-            'Ticker': ticker,
-            'Previous_Close': hist_data['Close'].iloc[-1],
-            'Volume': hist_data['Volume'].iloc[-1],
-            'Cloud_Status': cloud_status,
-            'Awesome_Oscillator': ao_value,
-            'AO_Interpretation': interpret_ao(ao_value),
-            'AO_Movement': ao_movement,
-            'VWAP': vwap_value,
-            'RSI_Smoothed': rsi_smoothed.iloc[-1],
-            'RSI_Trad': rsi_trad.iloc[-1],
-            'Cahold_Status': cahold_value
-        }
-
-        # Add EMAs to the stock dictionary
-        for window in [21, 36, 50, 95, 200]:
-            ema_column_name = f'EMA_{window}'
-            stock_dict[ema_column_name] = hist_data[ema_column_name].iloc[-1]
-
-        # Evaluate conditions for each EMA and assign labels
-        stock_dict['EMA_Labels'] = evaluate_ema_conditions(stock_dict)
-
-        # Store the last MACD and Signal line values in the stock_dict
-        stock_dict['MACD'] = hist_data['MACD'].iloc[-1]
-        stock_dict['Signal_Line'] = hist_data['Signal_Line'].iloc[-1]
-
-        # Append the dictionary to the data list
-        data.append(stock_dict)
-
-# Convert the list of dictionaries into a DataFrame
-df_stocks = pd.DataFrame(data)
-# Merge your existing stock DataFrame with the sector data
-df_stocks = df_stocks.merge(sp500_df, left_on='Ticker', right_on='Symbol', how='left')
-
-# Filter stocks with volume greater than 1 million
-df = df_stocks[df_stocks['Volume'] > 1000000]
-
-# Display the filtered DataFrame
-df.head()
-
-# Creating the Streamlit application
-st.title('S&P 500 Stock Data Viewer')
-
-# Adding a sidebar for configuration
-st.sidebar.header('Filter Settings')
-
-# Adding filters to the sidebar
-selected_ticker = st.sidebar.multiselect('Select Ticker', options=df['Ticker'].unique(), default=df['Ticker'].unique())
-selected_sector = st.sidebar.multiselect('Select Sector', options=df['GICS Sector'].unique(), default=df['GICS Sector'].unique())
-
-# Numeric filters for Volume and Returns
-min_volume = st.sidebar.slider('Minimum Volume', int(df['Volume'].min()), int(df['Volume'].max()), int(df['Volume'].min()))
-max_volume = st.sidebar.slider('Maximum Volume', int(df['Volume'].min()), int(df['Volume'].max()), int(df['Volume'].max()))
-
-min_returns = st.sidebar.slider('Minimum Returns', float(df['Returns'].min()), float(df['Returns'].max()), float(df['Returns'].min()))
-max_returns = st.sidebar.slider('Maximum Returns', float(df['Returns'].min()), float(df['Returns'].max()), float(df['Returns'].max()))
-
-# Filters for Awesome Oscillator interpretation and Cloud Status
-ao_options = st.sidebar.multiselect('Awesome Oscillator Interpretation', options=df['AO_Interpretation'].unique(), default=df['AO_Interpretation'].unique())
-cloud_status_options = st.sidebar.multiselect('Cloud Status', options=df['Cloud_Status'].unique(), default=df['Cloud_Status'].unique())
-
-# Filter data based on selection
-query = (df['Ticker'].isin(selected_ticker) &
-         df['GICS Sector'].isin(selected_sector) &
-         (df['Volume'] >= min_volume) & (df['Volume'] <= max_volume) &
-         (df['Returns'] >= min_returns) & (df['Returns'] <= max_returns) &
-         df['AO_Interpretation'].isin(ao_options) &
-         df['Cloud_Status'].isin(cloud_status_options))
-
-filtered_data = df[query]
+volume_filter = st.sidebar.slider('Minimum Volume', int(df_stocks['Volume'].min()), int(df_stocks['Volume'].max()), int(df_stocks['Volume'].min()))
+df_stocks = df_stocks[df_stocks['Volume'] >= volume_filter]
 
 # Displaying the DataFrame
-st.write(filtered_data)
+st.write(df_stocks)
+
+# Optionally add plots
+if st.sidebar.checkbox("Show Plots"):
+    st.set_option('deprecation.showPyplotGlobalUse', False)
+    fig, ax = plt.subplots()
+    sns.countplot(data=df_stocks, x='GICS Sector')
+    plt.xticks(rotation=45)
+    st.pyplot(fig)
+
