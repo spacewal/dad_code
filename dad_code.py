@@ -238,9 +238,6 @@ for ticker in sp500_df['Symbol']:  # Make sure to access the 'Symbol' column
 # Convert the list of dictionaries into a DataFrame
 df_stocks = pd.DataFrame(data)
 
-# Merge your existing stock DataFrame with the sector data
-df_stocks = df_stocks.merge(sp500_df, on='Symbol', how='left')
-
 # Filter stocks with volume greater than 1 million
 df_filtered = df_stocks[df_stocks['Volume'] > 1000000]
 
@@ -252,7 +249,6 @@ st.sidebar.header('Filter Settings')
 
 # Adding filters to the sidebar
 selected_ticker = st.sidebar.multiselect('Select Ticker', options=df_filtered['Ticker'].unique(), default=df_filtered['Ticker'].unique())
-selected_sector = st.sidebar.multiselect('Select Sector', options=df_filtered['GICS Sector'].unique(), default=df_filtered['GICS Sector'].unique())
 
 # Numeric filters for Volume and Returns
 min_volume = st.sidebar.slider('Minimum Volume', int(df_filtered['Volume'].min()), int(df_filtered['Volume'].max()), int(df_filtered['Volume'].min()))
@@ -266,8 +262,7 @@ ao_options = st.sidebar.multiselect('Awesome Oscillator Interpretation', options
 cloud_status_options = st.sidebar.multiselect('Cloud Status', options=df_filtered['Cloud_Status'].unique(), default=df_filtered['Cloud_Status'].unique())
 
 # Filter data based on selection
-query = (df_filtered['Ticker'].isin(selected_ticker) & 
-         df_filtered['GICS Sector'].isin(selected_sector) & 
+query = (df_filtered['Ticker'].isin(selected_ticker)  & 
          (df_filtered['Volume'] >= min_volume) & (df_filtered['Volume'] <= max_volume) & 
          (df_filtered['Returns'] >= min_returns) & (df_filtered['Returns'] <= max_returns) & 
          df_filtered['AO_Interpretation'].isin(ao_options) & 
