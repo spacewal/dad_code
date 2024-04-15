@@ -170,7 +170,7 @@ def calculate_returns(df):
 data = []
 
 # Loop through each ticker symbol
-for ticker in sp500_tickers:
+for ticker in sp500_df:
     # Fetch the ticker data
     stock = yf.Ticker(ticker)
 
