@@ -71,7 +71,7 @@ def calculate_macd(df):
     return macd_line, signal_line
 
 # Function to load and process data
-@st.cache
+st.cache_resource
 def load_data(tickers):
     data = []
     for ticker in tickers:
